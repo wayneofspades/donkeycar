@@ -4,11 +4,39 @@ import numpy as np
 from PIL import Image
 import glob
 from donkeycar.utils import rgb2gray
+import rospy
+import cv_bridge
+from cv_bridge import CvBridge, CvBridgeError
+from sensor_msgs.msg import Image
+import cv2
 
 class BaseCamera:
-
     def run_threaded(self):
         return self.frame
+
+class RosCamera(BaseCamera):
+    def __init__(self, image_w=640, image_h=480, image_d=3, framerate=30):
+        
+        rospy.init_node("image_stream_reader", anonymous=True, disable_signals=True)
+        self.data = np.zeros((image_h, image_h, image_d))
+        self.rgb_sub = rospy.Subscriber("/camera/color/image_raw", Image, self.image_received_call_back)
+
+    def image_received_call_back(self, img):
+        bridge = CvBridge()
+        try:
+            self.data = bridge.imgmsg_to_cv2(img, desired_encoding="rgb8")
+        except CvBridgeError as e:
+            print(e)
+
+    def run_threaded(self):
+        return self.data
+
+    def update(self):
+        pass
+
+    def shutdown(self):
+        rospy.signal_shutdown("shutting down image stream node")
+
 
 class PiCamera(BaseCamera):
     def __init__(self, image_w=160, image_h=120, image_d=3, framerate=20):
