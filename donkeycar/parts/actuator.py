@@ -7,7 +7,8 @@ are wrapped in a mixer class before being used in the drive loop.
 import time
 
 import donkeycar as dk
-
+import rospy
+from std_msgs.msg import Int32, Float32, String
         
 class PCA9685:
     ''' 
@@ -190,6 +191,40 @@ class PWMSteering:
         self.run(0) #set steering straight
 
 
+class PWMSteeringRos:
+    """
+    Wrapper over a PWM motor cotnroller to convert angles to PWM pulses.
+    """
+    LEFT_ANGLE = -1 
+    RIGHT_ANGLE = 1
+
+    def __init__(self, controller=None,
+                       left_pulse=290,
+                       right_pulse=490):
+
+        self.controller = controller
+        self.left_pulse = left_pulse
+        self.right_pulse = right_pulse
+        # rospy.init_node("angle_publisher", disable_signals=True)
+        self.angle_pub = rospy.Publisher("/donkeycar/angle", Float32)
+        self.data = 0
+
+    def run(self, angle):
+        if angle != self.data and not rospy.is_shutdown():
+            self.data = angle
+            self.angle_pub.publish(angle)
+
+        #map absolute angle to angle that vehicle can implement.
+        pulse = dk.utils.map_range(angle,
+                                self.LEFT_ANGLE, self.RIGHT_ANGLE,
+                                self.left_pulse, self.right_pulse)
+
+        self.controller.set_pulse(pulse)
+
+    def shutdown(self):
+        rospy.signal_shutdown("ros shutdown signalled from steering part")
+        self.run(0) #set steering straight
+
 
 class PWMThrottle:
     """
@@ -220,6 +255,7 @@ class PWMThrottle:
 
 
     def run(self, throttle):
+        
         if throttle > 0:
             pulse = dk.utils.map_range(throttle,
                                     0, self.MAX_THROTTLE, 
@@ -234,6 +270,58 @@ class PWMThrottle:
     def shutdown(self):
         self.run(0) #stop vehicle
 
+
+class PWMThrottleRos:
+    """
+    Wrapper over a PWM motor cotnroller to convert -1 to 1 throttle
+    values to PWM pulses.
+    """
+    MIN_THROTTLE = -1
+    MAX_THROTTLE =  1
+
+    def __init__(self, controller=None,
+                       max_pulse=300,
+                       min_pulse=490,
+                       zero_pulse=350):
+
+        self.controller = controller
+        self.max_pulse = max_pulse
+        self.min_pulse = min_pulse
+        self.zero_pulse = zero_pulse
+        
+        #send zero pulse to calibrate ESC
+        print("Init ESC")
+        self.controller.set_pulse(self.max_pulse)
+        time.sleep(0.01)
+        self.controller.set_pulse(self.min_pulse)
+        time.sleep(0.01)
+        self.controller.set_pulse(self.zero_pulse)
+        time.sleep(1)
+
+
+        # rospy.init_node("throttle_publisher", disable_signals=True)
+        self.angle_pub = rospy.Publisher("/donkeycar/throttle", Float32)
+        self.data = 0
+
+    def run(self, throttle):
+        if throttle != self.data and not rospy.is_shutdown():
+            self.data = throttle
+            self.angle_pub.publish(self.data)
+
+        if throttle > 0:
+            pulse = dk.utils.map_range(throttle,
+                                    0, self.MAX_THROTTLE, 
+                                    self.zero_pulse, self.max_pulse)
+        else:
+            pulse = dk.utils.map_range(throttle,
+                                    self.MIN_THROTTLE, 0, 
+                                    self.min_pulse, self.zero_pulse)
+
+        self.controller.set_pulse(pulse)
+        
+    def shutdown(self):
+        self.run(0) #stop vehicle
+        rospy.signal_shutdown("shutting down rospy from throttle part")
 
 
 class Adafruit_DCMotor_Hat:
