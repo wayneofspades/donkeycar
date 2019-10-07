@@ -57,6 +57,20 @@ def drive(cfg, model_path=None, use_joystick=False, model_type=None, camera_type
     
     #Initialize car
     V = dk.vehicle.Vehicle()
+    
+    if camera_type == "REALSENSE":
+        from donkeycar.parts.camera import D435Cam
+        cam = D435Cam()
+        V.add(
+            cam,
+            outputs = [
+                'cam/left_ir', 
+                'cam/right_ir', 
+                'cam/left_intrinsics', 
+                'cam/right_intrinsics'
+            ],
+            threaded=True
+        )
 
     if camera_type == "stereo":
 
@@ -503,14 +517,25 @@ def drive(cfg, model_path=None, use_joystick=False, model_type=None, camera_type
 
     
     #add tub to save data
+    if camera_type == "REALSENSE":
+        inputs=['cam/left_ir',
+                'cam/right_ir',
+                'cam/left_intrinsics',
+                'cam/right_intrinsics',
+                'user/angle', 'user/throttle', 'user/mode']
+        types=['image_array',
+               'image_array',
+               'vector',
+               'vector',
+               'float', 'float', 'str']
+    else:
+        inputs=['cam/image_array',
+                'user/angle', 'user/throttle', 
+                'user/mode']
 
-    inputs=['cam/image_array',
-            'user/angle', 'user/throttle', 
-            'user/mode']
-
-    types=['image_array',
-           'float', 'float',
-           'str']
+        types=['image_array',
+               'float', 'float',
+               'str']
 
     if cfg.TRAIN_BEHAVIORS:
         inputs += ['behavior/state', 'behavior/label', "behavior/one_hot_state_array"]
