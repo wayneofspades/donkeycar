@@ -5,45 +5,69 @@ from PIL import Image
 import glob
 from donkeycar.utils import rgb2gray
 import logging
+from cv_bridge import CvBridge
+import rospy
+from sensor_msgs.msg import Image, CameraInfo
 
 class BaseCamera:
     def run_threaded(self):
         return self.frame
 
-class D435Camera(BaseCamera):
-
-    def __init__(self):
-        # Declare RealSense pipeline, encapsulating the actual device and sensors
-        self.pipe = rs.pipeline()
-        cfg = rs.config()
-        cfg.enable_stream(rs.stream.infrared,1,424,240,rs.format.y8,20)
-        cfg.enable_stream(rs.stream.infrared,2,424,240,rs.format.y8,20)
-        profile = self.pipe.start(cfg)
+class D435Cam(BaseCamera):
+    def __init__(self):    
+        self.bridge = CvBridge()
         
-        # turn off the active stereo laser
-        device = pipeline_profile.get_device()
-        depth_sensor = device.query_sensors()[0]
-        depth_sensor.set_option(rs.option.laser_power,0)
-
-    def poll(self):
+        # Initialize Data
+        self.left_ir = np.zeros((240,424))        
+        self.right_ir = np.zeros((240,424))
+        self.left_intrinsics = np.zeros((9,))
+        self.right_intrinsics = np.zeros((9,))
+        
+        # Initialize subscribers
+        self.left_img_sub = rospy.Subscriber("/camera/infra1/image_rect_raw", Image, self.left_cam_cb)
+        self.left_intrinsics = rospy.Subscriber("/camera/infra1/camera_info", CameraInfo, self.left_info_cb)
+        self.right_img_sub = rospy.Subscriber("/camera/infra2/image_rect_raw", Image, self.right_cam_cb)
+        self.right_intrinsics = rospy.Subscriber("/camera/infra2/camera_info", CameraInfo, self.right_info_cb)
+        
+        # Initialize node
+        rospy.init_node("car", anonymous=True)
+ 
+    def left_cam_cb(self,image):
         try:
-            frames = self.pipe.wait_for_frames()
+            self.left_ir = np.asarray(
+                self.bridge.imgmsg_to_cv2(image, "mono8")    
+            )
         except Exception as e:
-            logging.error(e)
-            return
+            print(Exception)
 
-    def run_threaded(self):
-        return self.left_ir, self.right_ir, self.left_intrinsics, self.right_intrinsics        
+    def right_cam_cb(self,image):
+        try:
+            self.right_ir = np.asarray(
+                self.bridge.imgmsg_to_cv2(image, "mono8")    
+            )
+        except Exception as e:
+            print(Exception)
 
+    def left_info_cb(self,info):
+        self.left_intrinsics = [float(x) for x in np.asarray(info.K)]
+
+    def right_info_cb(self,info):
+        self.right_intrinsics = [float(x) for x in np.asarray(info.K)]
+    
     def run(self):
-        self.poll()
+        rospy.spin_once()
         return self.run_threaded()
-        
-    def shutdown(self):
-        self.running = False
-        time.sleep(0.1)
-        self.pipe.stop()
 
+    def run_threaded(self): 
+        return self.left_ir, self.right_ir, self.left_intrinsics, self.right_intrinsics
+    
+    def shutdown(self):
+        self.running=False
+        print("stopping RosCamera")
+        rospy.signal_shutdown("shutdown called on part")
+        
+    def update(self):
+        pass   
 
 class PiCamera(BaseCamera):
     def __init__(self, image_w=160, image_h=120, image_d=3, framerate=20):

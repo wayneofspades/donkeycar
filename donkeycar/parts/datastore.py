@@ -36,6 +36,8 @@ class Tub(object):
 
     def __init__(self, path, inputs=None, types=None, user_meta=[]):
 
+        print("Tub Inputs", inputs)
+        print("input types", types)
         self.path = os.path.expanduser(path)
         #print('path_in_tub:', self.path)
         self.meta_path = os.path.join(self.path, 'meta.json')
@@ -231,6 +233,7 @@ class Tub(object):
                 json_data[key]=path
 
             elif typ == 'image_array':
+                print(key, val)
                 img = Image.fromarray(np.uint8(val))
                 name = self.make_file_name(key, ext='.jpg')
                 img.save(os.path.join(self.path, name))
